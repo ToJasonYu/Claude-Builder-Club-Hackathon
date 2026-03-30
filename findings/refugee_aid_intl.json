@@ -1,0 +1,52 @@
+{
+  "ngo": {
+    "name": "Refugee Aid International",
+    "slug": "refugee_aid_intl",
+    "website_url": "https://www.unhcr.org",
+    "mission_statement": "Refugee Aid International works to protect and empower refugees and displaced persons worldwide, providing emergency relief, legal assistance, and pathways to durable solutions including resettlement and integration.",
+    "contact_email": "security@refugeeaid-example.org",
+    "population_served": "refugees"
+  },
+  "findings": [
+    {
+      "id": "RAF-001",
+      "title": "Publicly accessible S3 bucket exposing refugee intake forms with medical and PII data",
+      "severity": "critical",
+      "cwe_id": "CWE-306",
+      "cvss_score": 9.1,
+      "discovered_date": "2026-03-15",
+      "vulnerability_type": "misconfiguration",
+      "affected_component": "AWS S3 — intake-forms-prod bucket",
+      "data_sensitivity": "medical",
+      "ease_of_remediation": "high",
+      "description": "The S3 bucket 'intake-forms-prod' is configured with a public ACL, allowing anyone on the internet to list and download files without authentication. The bucket contains scanned refugee intake forms including medical history, family composition, nationality, persecution history, and case numbers — the most sensitive data category in your systems.",
+      "evidence_summary": "Confirmed via unauthenticated GET request returning HTTP 200 and returning a list of 4,312 files. Downloaded sample files confirmed PII and medical content including mental health assessments and trauma records.",
+      "remediation_code": "# Step 1: Block all public access\naws s3api put-bucket-acl \\\n  --bucket intake-forms-prod \\\n  --acl private\n\n# Step 2: Enable Public Access Block (prevents future misconfiguration)\naws s3api put-public-access-block \\\n  --bucket intake-forms-prod \\\n  --public-access-block-configuration \\\n  'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true'\n\n# Step 3: Verify\naws s3api get-bucket-acl --bucket intake-forms-prod\naws s3api get-public-access-block --bucket intake-forms-prod",
+      "remediation_type": "config_change",
+      "references": [
+        "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html",
+        "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-overview.html"
+      ]
+    },
+    {
+      "id": "RAF-002",
+      "title": "SQL injection in case management portal login endpoint",
+      "severity": "high",
+      "cwe_id": "CWE-89",
+      "cvss_score": 8.2,
+      "discovered_date": "2026-03-16",
+      "vulnerability_type": "injection",
+      "affected_component": "Case Management Portal — /api/v1/auth/login",
+      "data_sensitivity": "general_pii",
+      "ease_of_remediation": "medium",
+      "description": "The login endpoint at /api/v1/auth/login is vulnerable to SQL injection via the 'username' parameter. An attacker can bypass authentication or extract the entire case management database, which contains the names, contact information, case status, and resettlement data of approximately 18,000 registered refugees.",
+      "evidence_summary": "Confirmed authentication bypass using classic payload: username=admin'--&password=anything. Also confirmed data extraction using UNION-based technique; retrieved first 10 rows of the users table.",
+      "remediation_code": "# Python/Flask example — replace string formatting with parameterized queries\n\n# BEFORE (vulnerable):\n# query = f\"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'\"\n# cursor.execute(query)\n\n# AFTER (safe):\nquery = \"SELECT * FROM users WHERE username = %s AND password_hash = %s\"\ncursor.execute(query, (username, hashed_password))\n\n# If using SQLAlchemy ORM:\nuser = session.query(User).filter_by(username=username).first()\nif user and check_password_hash(user.password_hash, password):\n    # authenticate\n    pass",
+      "remediation_type": "code_fix",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+        "https://docs.python.org/3/library/sqlite3.html#sqlite3-placeholders"
+      ]
+    }
+  ]
+}
