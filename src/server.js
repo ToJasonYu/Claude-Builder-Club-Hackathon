@@ -16,7 +16,7 @@ const app = express();
 const PORT = 3000;
 
 // Serve static dashboard files
-app.use(express.static(join(__dirname, "dashboard", "public")));
+app.use(express.static(join(__dirname, "dashboard", "dist")));
 
 // ─── API Endpoints ───────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ app.get("/api/stats", (req, res) => {
 
 // SPA fallback
 app.use((req, res) => {
-  res.sendFile(join(__dirname, "dashboard", "public", "index.html"));
+  res.sendFile(join(__dirname, "dashboard", "dist", "index.html"));
 });
 
 app.listen(PORT, () => {
