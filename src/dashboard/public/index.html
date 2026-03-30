@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NGO-Guardian — Security Dashboard</title>
+  <meta name="description" content="Autonomous Safety Net for Non-Profits — Real-time vulnerability detection for NGO infrastructure">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Animated background -->
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+  <div class="bg-glow bg-glow-3"></div>
+  <div class="scan-line"></div>
+
+  <!-- Header -->
+  <header id="site-header">
+    <div class="header-inner">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <path d="M16 2L28 8V16C28 22.627 22.627 28 16 28C9.373 28 4 22.627 4 16V8L16 2Z" stroke="url(#logoGrad)" stroke-width="2" fill="none"/>
+            <path d="M16 8L22 11V16C22 19.314 19.314 22 16 22C12.686 22 10 19.314 10 16V11L16 8Z" fill="url(#logoGrad)" opacity="0.3"/>
+            <path d="M14 16L15.5 17.5L19 14" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs><linearGradient id="logoGrad" x1="4" y1="2" x2="28" y2="28"><stop stop-color="#00f0ff"/><stop offset="1" stop-color="#7b61ff"/></linearGradient></defs>
+          </svg>
+        </div>
+        <div>
+          <h1 class="logo-text">NGO-GUARDIAN</h1>
+          <p class="logo-sub">Autonomous Safety Net for Non-Profits</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-badge live">
+          <span class="pulse-dot"></span>
+          LIVE SCAN
+        </div>
+        <button id="btn-run-scan" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg>
+          Run Pipeline
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Pipeline Animation Bar -->
+  <section id="pipeline-bar">
+    <div class="pipeline-inner">
+      <div class="pipeline-stage completed" data-stage="discovery">
+        <div class="stage-icon">🔍</div>
+        <div class="stage-label">Discovery</div>
+        <div class="stage-sub">5 NGOs found</div>
+      </div>
+      <div class="pipeline-connector completed"></div>
+      <div class="pipeline-stage completed" data-stage="fingerprint">
+        <div class="stage-icon">🔬</div>
+        <div class="stage-label">Fingerprint</div>
+        <div class="stage-sub">5/5 vibe-coded</div>
+      </div>
+      <div class="pipeline-connector completed"></div>
+      <div class="pipeline-stage completed" data-stage="scan">
+        <div class="stage-icon">🛡️</div>
+        <div class="stage-label">Scan</div>
+        <div class="stage-sub">23 findings</div>
+      </div>
+      <div class="pipeline-connector completed"></div>
+      <div class="pipeline-stage completed" data-stage="score">
+        <div class="stage-icon">📊</div>
+        <div class="stage-label">Score</div>
+        <div class="stage-sub">Avg 90/100</div>
+      </div>
+      <div class="pipeline-connector completed"></div>
+      <div class="pipeline-stage completed" data-stage="report">
+        <div class="stage-icon">📄</div>
+        <div class="stage-label">Report</div>
+        <div class="stage-sub">5 reports</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Stats Cards -->
+    <section id="stats-section">
+      <div class="stats-grid">
+        <div class="stat-card stat-targets">
+          <div class="stat-icon">🎯</div>
+          <div class="stat-value" id="stat-targets">0</div>
+          <div class="stat-label">NGOs Scanned</div>
+          <div class="stat-detail">.org domains</div>
+        </div>
+        <div class="stat-card stat-vulns">
+          <div class="stat-icon">🐛</div>
+          <div class="stat-value" id="stat-vulns">0</div>
+          <div class="stat-label">Vulnerabilities</div>
+          <div class="stat-detail">detected</div>
+        </div>
+        <div class="stat-card stat-critical">
+          <div class="stat-icon">🔴</div>
+          <div class="stat-value" id="stat-critical">0</div>
+          <div class="stat-label">Critical</div>
+          <div class="stat-detail">require immediate action</div>
+        </div>
+        <div class="stat-card stat-score">
+          <div class="stat-icon">📊</div>
+          <div class="stat-value" id="stat-avgscore">0<span class="stat-unit">/100</span></div>
+          <div class="stat-label">Avg Risk Score</div>
+          <div class="stat-detail">Vibe Risk Index</div>
+        </div>
+        <div class="stat-card stat-data">
+          <div class="stat-icon">⚠️</div>
+          <div class="stat-value" id="stat-data-risk">0</div>
+          <div class="stat-label">Critical Data</div>
+          <div class="stat-detail">PII exposure detected</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav id="tab-nav">
+      <button class="tab active" data-tab="targets">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        Targets
+      </button>
+      <button class="tab" data-tab="vulnerabilities">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M3 12a9 9 0 1118 0 9 9 0 01-18 0z"/></svg>
+        Vulnerabilities
+      </button>
+      <button class="tab" data-tab="risk-map">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+        Risk Matrix
+      </button>
+      <button class="tab" data-tab="report">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8m8 4H8m2-8H8"/></svg>
+        Reports
+      </button>
+    </nav>
+
+    <!-- Tab Content -->
+    <section id="tab-content">
+      <!-- Targets Tab -->
+      <div class="tab-panel active" id="panel-targets">
+        <div id="targets-grid" class="targets-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Vulnerabilities Tab -->
+      <div class="tab-panel" id="panel-vulnerabilities">
+        <div class="vuln-controls">
+          <div class="vuln-filters">
+            <button class="filter-btn active" data-severity="all">All</button>
+            <button class="filter-btn critical" data-severity="CRITICAL">Critical</button>
+            <button class="filter-btn high" data-severity="HIGH">High</button>
+            <button class="filter-btn medium" data-severity="MEDIUM">Medium</button>
+            <button class="filter-btn low" data-severity="LOW">Low</button>
+          </div>
+        </div>
+        <div id="vuln-list" class="vuln-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Risk Matrix Tab -->
+      <div class="tab-panel" id="panel-risk-map">
+        <div class="risk-matrix-container">
+          <div class="risk-chart-section">
+            <h3>Vulnerability Distribution</h3>
+            <div id="severity-chart" class="severity-chart"></div>
+          </div>
+          <div class="risk-chart-section">
+            <h3>Risk Score Ranking</h3>
+            <div id="risk-bars" class="risk-bars"></div>
+          </div>
+          <div class="risk-chart-section">
+            <h3>Tech Stack Breakdown</h3>
+            <div id="stack-chart" class="stack-chart"></div>
+          </div>
+          <div class="risk-chart-section">
+            <h3>Data Sensitivity Classification</h3>
+            <div id="data-sensitivity" class="data-sensitivity"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Report Tab -->
+      <div class="tab-panel" id="panel-report">
+        <div class="report-viewer">
+          <div class="report-sidebar">
+            <h3>Generated Reports</h3>
+            <div id="report-list" class="report-list">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+          <div class="report-content">
+            <div id="report-display" class="report-display">
+              <p class="report-placeholder">Select a report from the sidebar to view its contents.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Target Detail Modal -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div id="modal" class="modal">
+      <button id="modal-close" class="modal-close">&times;</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-inner">
+      <p>🛡️ NGO-Guardian v1.0 — "We are Guardians, not Hunters."</p>
+      <p class="footer-sub">Zero-exploitation · Privacy-first · Empathy always</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

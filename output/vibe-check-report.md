@@ -1,6 +1,6 @@
 # 🛡️ NGO-Guardian — Vibe Check Report
 
-> **Generated**: 2026-03-29T23:59:15.818Z
+> **Generated**: 2026-03-30T00:20:07.169Z
 > **Scanned Targets**: 5
 > **Pipeline**: Discovery → Fingerprint → Scan → Score
 

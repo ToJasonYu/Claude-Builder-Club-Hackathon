@@ -9,8 +9,18 @@
     "scan": "node src/scan/detector.js",
     "report": "node src/report/generator.js",
     "start": "node src/index.js",
-    "scan:deep": "node src/agents/scanner.js"
+    "scan:deep": "node src/agents/scanner.js",
+    "dashboard": "node src/server.js"
   },
-  "keywords": ["ngo", "security", "vulnerability", "guardian", "hackathon"],
-  "license": "MIT"
+  "keywords": [
+    "ngo",
+    "security",
+    "vulnerability",
+    "guardian",
+    "hackathon"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
 }
