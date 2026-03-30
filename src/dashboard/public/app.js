@@ -1,299 +1,457 @@
-// ============================================================================
-// NGO-Guardian Dashboard — Interactive Frontend
-// ============================================================================
+// ============================================================
+// NGO Guardian — Dashboard Application
+// ============================================================
 
-let targets = [];
-let currentFilter = "all";
+let state = {
+  targets: [],
+  sisDashboard: null,
+  vulnFilter: "ALL",
+  vulnSearch: "",
+  targetSearch: "",
+};
 
-// ─── Init ────────────────────────────────────────────────────────────────────
+// ─── Bootstrap ───────────────────────────────────────────────
 
-document.addEventListener("DOMContentLoaded", async () => {
-  await loadData();
-  setupTabs();
-  setupFilters();
-  setupModal();
-  setupPipelineAnimation();
-  setupRunButton();
+document.addEventListener("DOMContentLoaded", () => {
+  loadData();
+  setupKeyboard();
 });
 
-// ─── Data Loading ────────────────────────────────────────────────────────────
-
 async function loadData() {
-  try {
-    const res = await fetch("/api/targets");
-    targets = await res.json();
-    renderStats();
-    renderTargets();
-    renderVulnerabilities();
-    renderRiskMatrix();
-    renderReportList();
-  } catch (err) {
-    console.error("Failed to load data:", err);
-  }
+  const [targets, sisDash] = await Promise.allSettled([
+    fetchJSON("/api/targets"),
+    fetchJSON("/api/sis-dashboard"),
+  ]);
+
+  state.targets = targets.status === "fulfilled" ? targets.value : [];
+  state.sisDashboard = sisDash.status === "fulfilled" ? sisDash.value : null;
+
+  renderAll();
 }
 
-// ─── Stats ───────────────────────────────────────────────────────────────────
+async function refreshData() {
+  const btn = document.querySelector(".btn-ghost");
+  btn.disabled = true;
+  btn.textContent = "Refreshing...";
+  await loadData();
+  btn.disabled = false;
+  btn.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg> Refresh`;
+}
 
-function renderStats() {
-  const totalVulns = targets.reduce((s, t) => s + t.vulnerabilities.length, 0);
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function renderAll() {
+  renderDashboard();
+  renderTargets();
+  renderVulnerabilities();
+  renderSIS();
+  renderDisclosures();
+  renderReports();
+  updateNavBadges();
+  updateLastScan();
+}
+
+// ─── View Routing ─────────────────────────────────────────────
+
+const VIEW_TITLES = {
+  dashboard:       ["Dashboard",        "Security intelligence overview"],
+  targets:         ["Scanned Targets",  "NGOs discovered and analyzed"],
+  vulnerabilities: ["Vulnerabilities",  "All findings ranked by severity"],
+  sis:             ["SIS Scoring",      "Social Impact Score analysis"],
+  disclosures:     ["Disclosure Drafts","Empathy-first disclosure emails"],
+  reports:         ["Reports",          "Generated output files"],
+};
+
+function switchView(view, el) {
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+
+  if (el) el.classList.add("active");
+  const panel = document.getElementById(`view-${view}`);
+  if (panel) panel.classList.add("active");
+
+  const [title, subtitle] = VIEW_TITLES[view] || ["", ""];
+  document.getElementById("topbar-title").textContent = title;
+  document.getElementById("topbar-subtitle").textContent = subtitle;
+}
+
+// ─── Dashboard ────────────────────────────────────────────────
+
+function renderDashboard() {
+  const targets = state.targets;
+  const sis = state.sisDashboard;
+
+  // Stats
+  const totalVulns = targets.reduce((s, t) => s + (t.vulnerabilities?.length || 0), 0);
   const totalCritical = targets.reduce((s, t) =>
-    s + t.vulnerabilities.filter(v => v.severity === "CRITICAL").length, 0);
-  const avgScore = Math.round(targets.reduce((s, t) => s + t.scoring.vibeRiskScore, 0) / targets.length);
-  const criticalData = targets.filter(t => t.scoring.criticalDataExposure).length;
+    s + (t.vulnerabilities?.filter(v => v.severity === "CRITICAL").length || 0), 0);
+  const avgSIS = sis?.summary?.avg_sis ?? "—";
+  const draftsCount = sis?.summary?.ngos_with_drafts ?? 0;
 
-  animateNumber("stat-targets", targets.length);
-  animateNumber("stat-vulns", totalVulns);
-  animateNumber("stat-critical", totalCritical);
-  animateNumber("stat-avgscore", avgScore, "/100");
-  animateNumber("stat-data-risk", criticalData);
-}
+  setText("dash-targets", targets.length || (sis?.summary?.total_ngos ?? "—"));
+  setText("dash-vulns", totalVulns || "—");
+  setText("dash-critical", totalCritical || "—");
+  setText("dash-avg-sis", avgSIS !== "—" ? avgSIS.toFixed(1) : "—");
+  setText("dash-drafts", draftsCount);
 
-function animateNumber(id, target, suffix = "") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  let current = 0;
-  const duration = 1200;
-  const step = target / (duration / 16);
-  const timer = setInterval(() => {
-    current += step;
-    if (current >= target) {
-      current = target;
-      clearInterval(timer);
+  // Severity chart
+  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+  for (const t of targets) {
+    for (const v of (t.vulnerabilities || [])) {
+      if (counts[v.severity] !== undefined) counts[v.severity]++;
     }
-    el.innerHTML = Math.round(current) + (suffix ? `<span class="stat-unit">${suffix}</span>` : "");
-  }, 16);
+  }
+  const maxCount = Math.max(...Object.values(counts), 1);
+
+  document.getElementById("dash-severity-chart").innerHTML = Object.entries(counts).map(([sev, count]) => `
+    <div class="sev-row">
+      <div class="sev-label" style="color: var(--sev-${sev.toLowerCase()})">${sev}</div>
+      <div class="sev-track">
+        <div class="sev-fill ${sev.toLowerCase()}" style="width:${(count/maxCount)*100}%"></div>
+      </div>
+      <div class="sev-count">${count}</div>
+    </div>
+  `).join("");
+
+  // SIS bars from Python dashboard
+  const sisBars = document.getElementById("dash-sis-bars");
+  if (sis?.ngos?.length) {
+    const sorted = [...sis.ngos].sort((a, b) => b.headline_sis - a.headline_sis);
+    sisBars.innerHTML = sorted.map(n => `
+      <div class="sis-bar-row">
+        <div class="sis-bar-name" title="${n.name}">${n.name}</div>
+        <div class="sis-bar-track">
+          <div class="sis-bar-fill" style="width:${n.headline_sis}%"></div>
+        </div>
+        <div class="sis-bar-val">${n.headline_sis}</div>
+      </div>
+    `).join("");
+  } else {
+    sisBars.innerHTML = `<div class="empty-state" style="padding:24px">
+      <p style="font-size:12px">Run <code>python -m agents.sis_agent</code> to see SIS scores</p>
+    </div>`;
+  }
+
+  // Pipeline
+  setText("pipe-discovery", targets.length ? `${targets.length} NGOs` : "—");
+  setText("pipe-scan", totalVulns ? `${totalVulns} findings` : "—");
+  setText("pipe-sis", sis?.summary?.total_ngos ? `${sis.summary.total_ngos} scored` : "—");
+  setText("pipe-disclosure", draftsCount ? `${draftsCount} drafted` : "Pending");
+
+  const hasDrafts = draftsCount > 0;
+  const dot = document.getElementById("pipe-dot-disclosure");
+  const line = document.getElementById("pipe-line-3");
+  if (dot) dot.className = `step-dot${hasDrafts ? " done" : ""}`;
+  if (line) line.className = `pipeline-line${hasDrafts ? " done" : ""}`;
 }
 
-// ─── Targets ─────────────────────────────────────────────────────────────────
+// ─── Targets ─────────────────────────────────────────────────
 
 function renderTargets() {
-  const grid = document.getElementById("targets-grid");
-  grid.innerHTML = targets.map((t, i) => {
-    const critCount = t.vulnerabilities.filter(v => v.severity === "CRITICAL").length;
-    const highCount = t.vulnerabilities.filter(v => v.severity === "HIGH").length;
-    const medCount = t.vulnerabilities.filter(v => v.severity === "MEDIUM").length;
-    const lowCount = t.vulnerabilities.filter(v => v.severity === "LOW").length;
-    const scoreColor = getScoreColor(t.scoring.vibeRiskScore);
-    const circumference = 2 * Math.PI * 26;
-    const offset = circumference - (t.scoring.vibeRiskScore / 100) * circumference;
+  const tbody = document.getElementById("targets-tbody");
+  const filterGroup = document.getElementById("sector-filter-group");
 
+  if (!state.targets.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No scan data. Run the JS pipeline first.</td></tr>`;
+    return;
+  }
+
+  // Build sector filters
+  const sectors = [...new Set(state.targets.map(t => t.sector).filter(Boolean))];
+  filterGroup.innerHTML = sectors.map(s =>
+    `<button class="filter-btn" onclick="setSectorFilter('${s}', this)">${s}</button>`
+  ).join("");
+
+  filterTargets();
+}
+
+let activeSectorFilter = null;
+
+function setSectorFilter(sector, el) {
+  activeSectorFilter = activeSectorFilter === sector ? null : sector;
+  document.querySelectorAll("#sector-filter-group .filter-btn").forEach(b => b.classList.remove("active"));
+  if (activeSectorFilter) el.classList.add("active");
+  filterTargets();
+}
+
+function filterTargets() {
+  const q = document.getElementById("target-search").value.toLowerCase();
+  const tbody = document.getElementById("targets-tbody");
+
+  const filtered = state.targets.filter(t => {
+    const matchQ = !q || t.name?.toLowerCase().includes(q) || t.domain?.toLowerCase().includes(q);
+    const matchSector = !activeSectorFilter || t.sector === activeSectorFilter;
+    return matchQ && matchSector;
+  });
+
+  const sev = t => {
+    const crit = t.vulnerabilities?.filter(v => v.severity === "CRITICAL").length || 0;
+    const high = t.vulnerabilities?.filter(v => v.severity === "HIGH").length || 0;
+    return `${crit ? `<span class="badge badge-critical">${crit} C</span> ` : ""}${high ? `<span class="badge badge-high">${high} H</span> ` : ""}${(t.vulnerabilities?.length || 0) - crit - high > 0 ? `<span class="badge badge-low">${(t.vulnerabilities?.length || 0) - crit - high}</span>` : ""}`;
+  };
+
+  tbody.innerHTML = filtered.map((t, i) => {
+    const scoreColor = t.scoring?.vibeRiskScore >= 80 ? "var(--red)" : t.scoring?.vibeRiskScore >= 60 ? "var(--amber)" : "var(--green)";
     return `
-      <div class="target-card animate-in" style="animation-delay: ${i * 100}ms" data-index="${i}">
-        <div class="target-card-header">
-          <div class="target-info">
-            <h3>${t.name}</h3>
-            <div class="target-domain">${t.domain}</div>
-            <span class="target-sector ${t.sector}">${t.sector}</span>
+      <tr>
+        <td><div style="font-weight:600">${t.name || "—"}</div></td>
+        <td><code style="font-size:11.5px;color:var(--text-3)">${t.domain || "—"}</code></td>
+        <td><span class="badge badge-sector">${t.sector || "—"}</span></td>
+        <td><span style="font-size:12px;color:var(--text-2)">${t.techStack?.platform || "—"}</span></td>
+        <td>${t.techStack?.isVibeCoded ? '<span class="tag-vibecoded">Yes</span>' : '<span style="color:var(--text-3);font-size:12px">No</span>'}</td>
+        <td>${sev(t) || `<span class="badge badge-low">${t.vulnerabilities?.length || 0}</span>`}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:700;color:${scoreColor}">${t.scoring?.vibeRiskScore ?? "—"}</span>
+            <div class="risk-score-bar"><div class="risk-score-fill" style="width:${t.scoring?.vibeRiskScore || 0}%;background:${scoreColor}"></div></div>
           </div>
-          <div class="target-score">
-            <div class="score-ring">
-              <svg viewBox="0 0 64 64">
-                <circle class="score-ring-bg" cx="32" cy="32" r="26"/>
-                <circle class="score-ring-fill" cx="32" cy="32" r="26"
-                  stroke="${scoreColor}"
-                  stroke-dasharray="${circumference}"
-                  stroke-dashoffset="${offset}"/>
-              </svg>
-              <div class="score-ring-value" style="color: ${scoreColor}">${t.scoring.vibeRiskScore}</div>
+        </td>
+        <td><button class="link-btn" onclick="openTargetModal(${i})">Details</button></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+// ─── Vulnerabilities ─────────────────────────────────────────
+
+function renderVulnerabilities() {
+  filterVulns();
+}
+
+function setVulnFilter(sev, el) {
+  state.vulnFilter = sev;
+  document.querySelectorAll(".filter-group .filter-btn").forEach(b => b.classList.remove("active"));
+  if (el) el.classList.add("active");
+  filterVulns();
+}
+
+function filterVulns() {
+  const q = document.getElementById("vuln-search")?.value?.toLowerCase() || "";
+  const tbody = document.getElementById("vuln-tbody");
+
+  let vulns = [];
+  for (const t of state.targets) {
+    for (const v of (t.vulnerabilities || [])) {
+      vulns.push({ ...v, orgName: t.name });
+    }
+  }
+
+  const sevOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+  vulns.sort((a, b) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9));
+
+  if (state.vulnFilter !== "ALL") vulns = vulns.filter(v => v.severity === state.vulnFilter);
+  if (q) vulns = vulns.filter(v =>
+    v.title?.toLowerCase().includes(q) ||
+    v.orgName?.toLowerCase().includes(q) ||
+    v.category?.toLowerCase().includes(q) ||
+    v.id?.toLowerCase().includes(q)
+  );
+
+  if (!vulns.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No vulnerabilities match your filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = vulns.map(v => `
+    <tr>
+      <td><code style="font-size:11px;color:var(--text-3)">${v.id || "—"}</code></td>
+      <td style="font-weight:500">${v.title || "—"}</td>
+      <td style="color:var(--text-2)">${v.orgName || "—"}</td>
+      <td><span style="font-size:12px;color:var(--text-2)">${v.category || "—"}</span></td>
+      <td><code style="font-size:11px;color:var(--text-3)">${v.cwe || "—"}</code></td>
+      <td><span class="badge badge-${(v.severity || "LOW").toLowerCase()}">${v.severity || "—"}</span></td>
+    </tr>
+  `).join("");
+}
+
+// ─── SIS Scoring ─────────────────────────────────────────────
+
+function renderSIS() {
+  const grid = document.getElementById("sis-grid");
+  const empty = document.getElementById("sis-empty");
+
+  if (!state.sisDashboard?.ngos?.length) {
+    grid.style.display = "none";
+    empty.style.display = "flex";
+    return;
+  }
+
+  empty.style.display = "none";
+  grid.style.display = "grid";
+
+  grid.innerHTML = state.sisDashboard.ngos.map(ngo => {
+    const findings = ngo.findings || [];
+    return `
+      <div class="sis-card">
+        <div class="sis-card-header">
+          <div>
+            <div class="sis-card-name">${ngo.name}</div>
+            <div class="sis-card-slug">${ngo.slug}</div>
+          </div>
+          <div class="sis-score-ring">
+            <div class="sis-score-num" style="color:${sisColor(ngo.headline_sis)}">${ngo.headline_sis}</div>
+            <div class="sis-score-label">SIS / 100</div>
+          </div>
+        </div>
+        <div class="sis-card-body">
+          <div class="sis-breakdown">
+            <div class="sis-breakdown-item">
+              <div class="breakdown-val">${findings[0]?.sis?.population_score ?? "—"}</div>
+              <div class="breakdown-label">Population</div>
+            </div>
+            <div class="sis-breakdown-item">
+              <div class="breakdown-val">${findings[0]?.sis?.data_sensitivity_score ?? "—"}</div>
+              <div class="breakdown-label">Data</div>
+            </div>
+            <div class="sis-breakdown-item">
+              <div class="breakdown-val">${findings[0]?.sis?.ease_of_remediation_score ?? "—"}</div>
+              <div class="breakdown-label">Ease Fix</div>
             </div>
           </div>
-        </div>
-        <div class="target-card-body">
-          <p class="target-mission">${t.mission}</p>
-          <div class="target-stack">
-            <span class="stack-tag">${t.techStack.platform}</span>
-            <span class="stack-tag">${t.techStack.framework || "Unknown"}</span>
-            ${t.techStack.isVibeCoded ? '<span class="stack-tag" style="background: rgba(255, 97, 216, 0.12); color: #ff61d8; border-color: rgba(255, 97, 216, 0.2);">⚡ vibe-coded</span>' : ""}
+
+          ${ngo.mission_alignment_narrative ? `
+          <div class="sis-narrative">${ngo.mission_alignment_narrative}</div>
+          ` : ""}
+
+          ${ngo.urgency_note ? `
+          <div class="sis-urgency">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" style="flex-shrink:0;margin-top:1px"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+            ${ngo.urgency_note}
           </div>
-        </div>
-        <div class="target-card-footer">
-          <div class="vuln-badges">
-            ${critCount ? `<span class="vuln-badge critical">${critCount} C</span>` : ""}
-            ${highCount ? `<span class="vuln-badge high">${highCount} H</span>` : ""}
-            ${medCount ? `<span class="vuln-badge medium">${medCount} M</span>` : ""}
-            ${lowCount ? `<span class="vuln-badge low">${lowCount} L</span>` : ""}
+          ` : ""}
+
+          <div class="sis-findings">
+            ${findings.map(f => `
+              <div class="sis-finding-row">
+                <span class="finding-id">${f.id}</span>
+                <span class="finding-title" title="${f.title}">${f.title}</span>
+                <span class="badge badge-${(f.severity || "low").toLowerCase()}">${f.severity}</span>
+                <span style="font-size:12px;font-weight:700;color:var(--indigo);margin-left:6px">${f.sis?.total_sis ?? ""}</span>
+              </div>
+            `).join("")}
           </div>
-          <button class="target-view-btn" onclick="openTargetModal(${i})">
-            View Details →
-          </button>
         </div>
       </div>
     `;
   }).join("");
 }
 
-function getScoreColor(score) {
-  if (score >= 80) return "#ff3b5c";
-  if (score >= 60) return "#ff8c42";
-  if (score >= 40) return "#ffd166";
-  return "#00c896";
+function sisColor(score) {
+  if (score >= 80) return "var(--red)";
+  if (score >= 60) return "var(--amber)";
+  return "var(--green)";
 }
 
-// ─── Vulnerabilities ─────────────────────────────────────────────────────────
+// ─── Disclosures ─────────────────────────────────────────────
 
-function renderVulnerabilities(filter = "all") {
-  const list = document.getElementById("vuln-list");
-  let allVulns = [];
-  for (const t of targets) {
-    for (const v of t.vulnerabilities) {
-      allVulns.push({ ...v, org: t.name, domain: t.domain });
-    }
+function renderDisclosures() {
+  const ngos = state.sisDashboard?.ngos || [];
+  const empty = document.getElementById("disclosures-empty");
+  const layout = document.getElementById("disclosure-layout");
+  const list = document.getElementById("disclosure-list");
+
+  const withDrafts = ngos.filter(n => n.disclosure_draft_path);
+
+  if (!withDrafts.length) {
+    empty.style.display = "flex";
+    layout.style.display = "none";
+    return;
   }
 
-  if (filter !== "all") {
-    allVulns = allVulns.filter(v => v.severity === filter);
-  }
+  empty.style.display = "none";
+  layout.style.display = "grid";
 
-  // Sort: CRITICAL first
-  const severityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-  allVulns.sort((a, b) => (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4));
-
-  list.innerHTML = allVulns.map((v, i) => `
-    <div class="vuln-item animate-in" style="animation-delay: ${i * 50}ms">
-      <div class="vuln-severity-bar ${v.severity}"></div>
-      <div class="vuln-id">${v.id}</div>
-      <div>
-        <div class="vuln-title">${v.title}</div>
-        <div class="vuln-location" title="${v.location}">${v.org} — ${v.location}</div>
-      </div>
-      <div class="vuln-category-tag">${v.category}</div>
-      <div class="vuln-badge ${v.severity.toLowerCase()}" style="justify-content: center;">${v.severity}</div>
-    </div>
-  `).join("");
-}
-
-// ─── Risk Matrix ─────────────────────────────────────────────────────────────
-
-function renderRiskMatrix() {
-  renderSeverityChart();
-  renderRiskBars();
-  renderStackChart();
-  renderDataSensitivity();
-}
-
-function renderSeverityChart() {
-  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-  for (const t of targets) {
-    for (const v of t.vulnerabilities) {
-      counts[v.severity] = (counts[v.severity] || 0) + 1;
-    }
-  }
-  const max = Math.max(...Object.values(counts), 1);
-
-  document.getElementById("severity-chart").innerHTML = Object.entries(counts).map(([sev, count]) => `
-    <div class="severity-row">
-      <div class="severity-label" style="color: var(--severity-${sev.toLowerCase()})">${sev}</div>
-      <div class="severity-bar-track">
-        <div class="severity-bar-fill ${sev.toLowerCase()}" style="width: ${(count / max) * 100}%">
-          <span class="severity-bar-count">${count}</span>
+  list.innerHTML = `<div class="disclosure-list-header">NGO Disclosures (${withDrafts.length})</div>` +
+    withDrafts.map((ngo, i) => `
+      <div class="disclosure-item" onclick="loadDisclosure('${ngo.slug}', this)">
+        <div class="disclosure-item-name">${ngo.name}</div>
+        <div class="disclosure-item-meta">
+          <span class="badge badge-sector" style="font-size:10px;padding:1px 6px">SIS ${ngo.headline_sis}</span>
+          <span>${ngo.findings?.length || 0} finding${(ngo.findings?.length || 0) !== 1 ? "s" : ""}</span>
         </div>
       </div>
-    </div>
-  `).join("");
-}
+    `).join("");
 
-function renderRiskBars() {
-  const sorted = [...targets].sort((a, b) => b.scoring.vibeRiskScore - a.scoring.vibeRiskScore);
-
-  document.getElementById("risk-bars").innerHTML = sorted.map(t => `
-    <div class="risk-bar-row">
-      <div class="risk-bar-name">${t.name}</div>
-      <div class="risk-bar-track">
-        <div class="risk-bar-fill" style="width: ${t.scoring.vibeRiskScore}%; background: linear-gradient(90deg, ${getScoreColor(t.scoring.vibeRiskScore)}88, ${getScoreColor(t.scoring.vibeRiskScore)});">
-          ${t.scoring.vibeRiskScore}/100
-        </div>
-      </div>
-    </div>
-  `).join("");
-}
-
-function renderStackChart() {
-  const stacks = {};
-  for (const t of targets) {
-    const platform = t.techStack.platform || "Unknown";
-    stacks[platform] = (stacks[platform] || 0) + 1;
+  // Auto-load first
+  if (withDrafts.length > 0) {
+    const firstItem = list.querySelector(".disclosure-item");
+    loadDisclosure(withDrafts[0].slug, firstItem);
   }
-
-  document.getElementById("stack-chart").innerHTML = Object.entries(stacks).map(([name, count]) => `
-    <div class="stack-item">
-      <div class="stack-count">${count}</div>
-      <div class="stack-name">${name}</div>
-    </div>
-  `).join("");
 }
 
-function renderDataSensitivity() {
-  const dataTypes = [
-    { icon: "👶", type: "Protected Minor PII", detail: "Child profiles, photos, welfare records", level: "CRITICAL" },
-    { icon: "📋", type: "Case File Records", detail: "Refugee status, legal cases, personal histories", level: "CRITICAL" },
-    { icon: "🏥", type: "Health & Welfare", detail: "Medical histories, disability status, trauma assessments", level: "CRITICAL" },
-    { icon: "📍", type: "Location Data", detail: "Refugee camps, aid distribution points, field worker locations", level: "HIGH" },
-    { icon: "💰", type: "Financial Records", detail: "Donor payment info, transaction histories", level: "HIGH" },
-    { icon: "🔵", type: "Personal PII", detail: "Names, emails, phone numbers, addresses", level: "MEDIUM" }
-  ];
+async function loadDisclosure(slug, el) {
+  document.querySelectorAll(".disclosure-item").forEach(i => i.classList.remove("active"));
+  if (el) el.classList.add("active");
 
-  document.getElementById("data-sensitivity").innerHTML = dataTypes.map(d => `
-    <div class="sensitivity-item">
-      <div class="sensitivity-icon">${d.icon}</div>
-      <div class="sensitivity-info">
-        <div class="sensitivity-type">${d.type}</div>
-        <div class="sensitivity-detail">${d.detail}</div>
-      </div>
-      <span class="sensitivity-level ${d.level}">${d.level}</span>
-    </div>
-  `).join("");
+  const content = document.getElementById("disclosure-content");
+  content.innerHTML = `<div class="empty-state"><p style="color:var(--text-3)">Loading...</p></div>`;
+
+  try {
+    const res = await fetch(`/api/disclosures/${slug}`);
+    if (!res.ok) throw new Error("Not found");
+    const md = await res.text();
+    content.innerHTML = `<div class="md-content">${renderMarkdown(md)}</div>`;
+  } catch {
+    content.innerHTML = `<div class="empty-state"><p>Could not load disclosure draft.</p><code>/api/disclosures/${slug}</code></div>`;
+  }
 }
 
-// ─── Reports ─────────────────────────────────────────────────────────────────
+// ─── Reports ─────────────────────────────────────────────────
 
-function renderReportList() {
-  const reports = [
-    { name: "Full Vibe Check Report", type: "vibe-check-report.md", endpoint: "/api/report" },
-    { name: "Fix Artifact (Patches)", type: "fix-artifact.patch", endpoint: "/api/fix-artifact" },
-    ...targets.map(t => ({
-      name: t.name,
-      type: `findings/${t.domain.replace(/\./g, "-")}.md`,
-      endpoint: `/api/findings/${t.domain.replace(/\./g, "-")}`
-    }))
-  ];
-
+function renderReports() {
   const list = document.getElementById("report-list");
-  list.innerHTML = reports.map((r, i) => `
-    <div class="report-list-item" data-endpoint="${r.endpoint}" onclick="loadReport(this, '${r.endpoint}')">
-      <div class="report-item-name">${r.name}</div>
-      <div class="report-item-type">${r.type}</div>
-    </div>
-  `).join("");
+
+  const reports = [
+    { name: "Vibe Check Report", type: "output/vibe-check-report.md", endpoint: "/api/report" },
+    { name: "Fix Artifact (Patch)", type: "output/fix-artifact.patch", endpoint: "/api/fix-artifact" },
+    ...(state.targets || []).map(t => ({
+      name: t.name,
+      type: `findings/vibe-check-report-${t.domain?.replace(/\./g, "-")}.md`,
+      endpoint: `/api/findings/${t.domain?.replace(/\./g, "-")}`,
+    })),
+  ];
+
+  list.innerHTML = `<div class="report-list-header">Generated Files</div>` +
+    reports.map(r => `
+      <div class="report-list-item" onclick="loadReport('${r.endpoint}', this)">
+        <div class="report-item-name">${r.name}</div>
+        <div class="report-item-type">${r.type}</div>
+      </div>
+    `).join("");
 }
 
-async function loadReport(el, endpoint) {
-  // Update active state
+async function loadReport(endpoint, el) {
   document.querySelectorAll(".report-list-item").forEach(i => i.classList.remove("active"));
-  el.classList.add("active");
+  if (el) el.classList.add("active");
 
   const display = document.getElementById("report-display");
-  display.innerHTML = '<p class="report-placeholder">Loading...</p>';
+  display.innerHTML = `<div class="empty-state"><p style="color:var(--text-3)">Loading...</p></div>`;
 
   try {
     const res = await fetch(endpoint);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
-    display.innerHTML = renderMarkdown(text);
+    display.innerHTML = `<div class="md-content">${renderMarkdown(text)}</div>`;
   } catch (err) {
-    display.innerHTML = '<p class="report-placeholder">Failed to load report.</p>';
+    display.innerHTML = `<div class="empty-state"><p>Could not load report.</p></div>`;
   }
 }
 
+// ─── Markdown Renderer ────────────────────────────────────────
+
 function renderMarkdown(md) {
-  // Simple markdown to HTML renderer
-  let html = md;
+  let html = md
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
-  // Escape HTML
-  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  // Code blocks (``` ... ```)
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
-  });
+  // Code blocks
+  html = html.replace(/```[\w]*\n([\s\S]*?)```/g, (_, code) =>
+    `<pre><code>${code.trim()}</code></pre>`);
 
   // Inline code
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
@@ -304,229 +462,172 @@ function renderMarkdown(md) {
   html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
   html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
 
-  // Bold and italic
-  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  // Bold / italic
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
 
   // Blockquotes
   html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
 
-  // Horizontal rules
+  // HR
   html = html.replace(/^---$/gm, "<hr>");
 
-  // Tables
-  html = html.replace(/^\|(.+)\|$/gm, (match) => {
-    const cells = match.split("|").filter(c => c.trim());
-    if (cells.every(c => /^[\s-:]+$/.test(c))) return "<!-- sep -->";
-    return cells.map(c => `<td>${c.trim()}</td>`).join("");
+  // Unordered lists
+  html = html.replace(/((?:^- .+\n?)+)/gm, (match) => {
+    const items = match.trim().split("\n").map(l => `<li>${l.replace(/^- /, "")}</li>`).join("");
+    return `<ul>${items}</ul>`;
   });
 
-  // Wrap table rows
+  // Tables
   const lines = html.split("\n");
+  let out = [];
   let inTable = false;
-  let tableHtml = "";
-  const output = [];
+  let tableRows = [];
 
   for (const line of lines) {
-    if (line.startsWith("<td>")) {
-      if (!inTable) { tableHtml = "<table><tbody>"; inTable = true; }
-      if (line !== "<!-- sep -->") {
-        tableHtml += `<tr>${line}</tr>`;
-      }
+    if (/^\|.+\|$/.test(line)) {
+      const cells = line.split("|").slice(1, -1).map(c => c.trim());
+      if (cells.every(c => /^[-: ]+$/.test(c))) continue; // separator
+      tableRows.push(cells);
+      inTable = true;
     } else {
       if (inTable) {
-        tableHtml += "</tbody></table>";
-        // Convert first row to th
-        tableHtml = tableHtml.replace(/<tbody><tr>(.*?)<\/tr>/, (_, cells) => {
-          return `<thead><tr>${cells.replace(/<td>/g, "<th>").replace(/<\/td>/g, "</th>")}</tr></thead><tbody>`;
-        });
-        output.push(tableHtml);
+        const header = tableRows[0].map(c => `<th>${c}</th>`).join("");
+        const body = tableRows.slice(1).map(row =>
+          `<tr>${row.map(c => `<td>${c}</td>`).join("")}</tr>`
+        ).join("");
+        out.push(`<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`);
+        tableRows = [];
         inTable = false;
-        tableHtml = "";
       }
-      output.push(line);
+      out.push(line);
     }
   }
-  if (inTable) {
-    tableHtml += "</tbody></table>";
-    tableHtml = tableHtml.replace(/<tbody><tr>(.*?)<\/tr>/, (_, cells) => {
-      return `<thead><tr>${cells.replace(/<td>/g, "<th>").replace(/<\/td>/g, "</th>")}</tr></thead><tbody>`;
-    });
-    output.push(tableHtml);
+  if (inTable && tableRows.length) {
+    const header = tableRows[0].map(c => `<th>${c}</th>`).join("");
+    const body = tableRows.slice(1).map(row =>
+      `<tr>${row.map(c => `<td>${c}</td>`).join("")}</tr>`
+    ).join("");
+    out.push(`<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`);
   }
 
-  html = output.join("\n");
+  html = out.join("\n");
 
-  // Lists
-  html = html.replace(/^- (.+)$/gm, "<li>$1</li>");
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
-
-  // Paragraphs (lines not wrapped in tags)
-  html = html.replace(/^(?!<[a-z]|$)(.+)$/gm, "<p>$1</p>");
-
-  // Clean up consecutive blockquotes
-  html = html.replace(/<\/blockquote>\n<blockquote>/g, "<br>");
+  // Paragraphs (lines not already in block elements)
+  html = html.replace(/^(?!<[a-z|\/])(.+)$/gm, "<p>$1</p>");
 
   return html;
 }
 
-// ─── Modal ───────────────────────────────────────────────────────────────────
-
-function setupModal() {
-  document.getElementById("modal-close").addEventListener("click", closeModal);
-  document.getElementById("modal-overlay").addEventListener("click", (e) => {
-    if (e.target === e.currentTarget) closeModal();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeModal();
-  });
-}
+// ─── Target Modal ─────────────────────────────────────────────
 
 function openTargetModal(index) {
-  const t = targets[index];
-  const scoreColor = getScoreColor(t.scoring.vibeRiskScore);
+  const t = state.targets[index];
+  if (!t) return;
 
-  const critCount = t.vulnerabilities.filter(v => v.severity === "CRITICAL").length;
-  const highCount = t.vulnerabilities.filter(v => v.severity === "HIGH").length;
+  const critCount = t.vulnerabilities?.filter(v => v.severity === "CRITICAL").length || 0;
+  const highCount = t.vulnerabilities?.filter(v => v.severity === "HIGH").length || 0;
+  const scoreColor = t.scoring?.vibeRiskScore >= 80 ? "var(--red)" : t.scoring?.vibeRiskScore >= 60 ? "var(--amber)" : "var(--green)";
 
-  document.getElementById("modal-content").innerHTML = `
-    <div class="modal-target-header">
-      <div>
-        <div class="modal-target-name">${t.name}</div>
-        <div class="modal-target-domain">${t.domain}</div>
-        <span class="target-sector ${t.sector}" style="margin-top: 8px; display: inline-block;">${t.sector}</span>
-      </div>
-      <div class="modal-score-display">
-        <div class="modal-score-number" style="color: ${scoreColor}">${t.scoring.vibeRiskScore}</div>
-        <div class="modal-score-label">Vibe Risk Score</div>
-      </div>
-    </div>
+  document.getElementById("modal-body").innerHTML = `
+    <div class="modal-org-name">${t.name}</div>
+    <div class="modal-org-domain">${t.domain}</div>
+    <span class="badge badge-sector">${t.sector}</span>
 
     <div class="modal-section">
-      <h4>📋 Mission</h4>
-      <p style="font-size: 13px; color: var(--text-secondary);">${t.mission}</p>
-    </div>
-
-    <div class="modal-section">
-      <h4>⚡ Tech Stack</h4>
-      <div class="target-stack">
-        <span class="stack-tag">${t.techStack.platform}</span>
-        <span class="stack-tag">${t.techStack.framework || "Unknown"}</span>
-        ${t.techStack.isVibeCoded ? '<span class="stack-tag" style="background: rgba(255, 97, 216, 0.12); color: #ff61d8; border-color: rgba(255, 97, 216, 0.2);">⚡ vibe-coded</span>' : ""}
+      <div class="modal-section-title">Risk Assessment</div>
+      <div class="modal-meta-grid">
+        <div class="modal-meta-item">
+          <div class="modal-meta-val" style="color:${scoreColor}">${t.scoring?.vibeRiskScore ?? "—"}</div>
+          <div class="modal-meta-label">Risk Score</div>
+        </div>
+        <div class="modal-meta-item">
+          <div class="modal-meta-val" style="color:var(--red)">${critCount}</div>
+          <div class="modal-meta-label">Critical</div>
+        </div>
+        <div class="modal-meta-item">
+          <div class="modal-meta-val">${t.vulnerabilities?.length || 0}</div>
+          <div class="modal-meta-label">Total Findings</div>
+        </div>
       </div>
     </div>
 
     <div class="modal-section">
-      <h4>🌐 Discovered Subdomains (${t.subdomains.length})</h4>
-      <div class="modal-subdomains">
-        ${t.subdomains.map(s => `<span class="subdomain-chip">${s}</span>`).join("")}
-      </div>
+      <div class="modal-section-title">Mission</div>
+      <div class="modal-mission">${t.mission || "Not available"}</div>
     </div>
 
     <div class="modal-section">
-      <h4>🔒 Security Headers (${t.securityHeaders.score ?? "N/A"}%)</h4>
-      <div class="modal-headers">
-        ${t.securityHeaders.missing.map(h => `<span class="header-chip missing">✗ ${h}</span>`).join("")}
-        ${t.securityHeaders.present.map(h => `<span class="header-chip present">✓ ${h}</span>`).join("")}
+      <div class="modal-section-title">Tech Stack</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span class="badge badge-sector">${t.techStack?.platform || "—"}</span>
+        ${t.techStack?.framework ? `<span class="badge badge-low">${t.techStack.framework}</span>` : ""}
+        ${t.techStack?.isVibeCoded ? `<span class="tag-vibecoded">Vibe-Coded</span>` : ""}
       </div>
     </div>
 
+    ${t.securityHeaders ? `
     <div class="modal-section">
-      <h4>🐛 Vulnerabilities (${t.vulnerabilities.length}) — ${critCount} Critical, ${highCount} High</h4>
+      <div class="modal-section-title">Security Headers (${t.securityHeaders.score ?? "?"}%)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${(t.securityHeaders.present || []).map(h => `<span class="chip header-chip-ok">✓ ${h}</span>`).join("")}
+        ${(t.securityHeaders.missing || []).map(h => `<span class="chip header-chip-missing">✗ ${h}</span>`).join("")}
+      </div>
+    </div>
+    ` : ""}
+
+    <div class="modal-section">
+      <div class="modal-section-title">Vulnerabilities (${t.vulnerabilities?.length || 0})</div>
       <div class="modal-vuln-list">
-        ${t.vulnerabilities.map(v => `
-          <div class="modal-vuln ${v.severity}">
-            <div class="modal-vuln-header">
-              <span class="modal-vuln-title">${v.title}</span>
-              <span class="modal-vuln-severity ${v.severity}">${v.severity}</span>
-            </div>
-            <div class="modal-vuln-location">${v.id} · ${v.category} · ${v.cwe} · ${v.location}</div>
+        ${(t.vulnerabilities || []).map(v => `
+          <div class="modal-vuln-row">
+            <span class="modal-vuln-id">${v.id}</span>
+            <span class="modal-vuln-title">${v.title}</span>
+            <span class="badge badge-${(v.severity || "low").toLowerCase()}">${v.severity}</span>
           </div>
         `).join("")}
       </div>
     </div>
-
-    ${t.scoring.criticalDataExposure ? `
-    <div class="modal-section" style="padding: 16px; background: rgba(255, 59, 92, 0.06); border: 1px solid rgba(255, 59, 92, 0.15); border-radius: var(--radius-md);">
-      <h4 style="color: var(--severity-critical);">⚠️ Critical Data Exposure Detected</h4>
-      <p style="font-size: 12px; color: var(--text-secondary);">This organization handles sensitive data (PII, minor data, or health records) that appears to be insufficiently protected based on the vulnerabilities found.</p>
-    </div>
-    ` : ""}
   `;
 
-  document.getElementById("modal-overlay").classList.add("active");
+  document.getElementById("modal-backdrop").classList.add("open");
   document.body.style.overflow = "hidden";
 }
 
 function closeModal() {
-  document.getElementById("modal-overlay").classList.remove("active");
+  document.getElementById("modal-backdrop").classList.remove("open");
   document.body.style.overflow = "";
 }
 
-// ─── Tabs ────────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────
 
-function setupTabs() {
-  document.querySelectorAll(".tab").forEach(tab => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-      tab.classList.add("active");
-      document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
-    });
-  });
+function updateNavBadges() {
+  const totalVulns = state.targets.reduce((s, t) => s + (t.vulnerabilities?.length || 0), 0);
+  const sisCount = state.sisDashboard?.ngos?.length || 0;
+  const draftsCount = state.sisDashboard?.summary?.ngos_with_drafts || 0;
+
+  document.getElementById("nav-badge-targets").textContent = state.targets.length;
+  document.getElementById("nav-badge-vulns").textContent = totalVulns;
+  document.getElementById("nav-badge-sis").textContent = sisCount;
+  document.getElementById("nav-badge-disclosures").textContent = draftsCount;
 }
 
-// ─── Filters ─────────────────────────────────────────────────────────────────
-
-function setupFilters() {
-  document.querySelectorAll(".filter-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      renderVulnerabilities(btn.dataset.severity);
-    });
-  });
+function updateLastScan() {
+  const ts = state.sisDashboard?.generated_at;
+  const el = document.getElementById("last-scan-label");
+  if (ts && el) {
+    const d = new Date(ts);
+    el.textContent = `Last analyzed: ${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+  }
 }
 
-// ─── Pipeline Animation ─────────────────────────────────────────────────────
-
-function setupPipelineAnimation() {
-  // Pipeline stages are already marked as completed
-  // We animate them in sequence on load
-  const stages = document.querySelectorAll(".pipeline-stage");
-  const connectors = document.querySelectorAll(".pipeline-connector");
-
-  stages.forEach(s => s.classList.remove("completed"));
-  connectors.forEach(c => c.classList.remove("completed"));
-
-  stages.forEach((stage, i) => {
-    setTimeout(() => {
-      stage.classList.add("completed");
-      if (connectors[i]) {
-        setTimeout(() => connectors[i].classList.add("completed"), 200);
-      }
-    }, i * 400 + 300);
-  });
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
 }
 
-// ─── Run Button ──────────────────────────────────────────────────────────────
-
-function setupRunButton() {
-  document.getElementById("btn-run-scan").addEventListener("click", async () => {
-    const btn = document.getElementById("btn-run-scan");
-    btn.disabled = true;
-    btn.innerHTML = `<span class="pulse-dot"></span> Scanning...`;
-
-    // Re-animate pipeline
-    setupPipelineAnimation();
-
-    // Simulate delay
-    await new Promise(r => setTimeout(r, 2500));
-
-    // Reload data
-    await loadData();
-
-    btn.disabled = false;
-    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2L14 8L4 14V2Z" fill="currentColor"/></svg> Run Pipeline`;
+function setupKeyboard() {
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeModal();
   });
 }

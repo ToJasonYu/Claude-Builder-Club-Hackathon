@@ -79,6 +79,22 @@ app.get("/api/stats", (req, res) => {
   });
 });
 
+app.get("/api/sis-dashboard", (req, res) => {
+  const dashPath = join(PROJECT_ROOT, "dashboard_data.json");
+  if (!existsSync(dashPath)) {
+    return res.status(404).json({ error: "No SIS dashboard data. Run sis_agent first." });
+  }
+  res.json(JSON.parse(readFileSync(dashPath, "utf-8")));
+});
+
+app.get("/api/disclosures/:slug", (req, res) => {
+  const draftPath = join(PROJECT_ROOT, "outreach", "drafts", `${req.params.slug}_disclosure.md`);
+  if (!existsSync(draftPath)) {
+    return res.status(404).json({ error: "Disclosure draft not found." });
+  }
+  res.type("text/markdown").send(readFileSync(draftPath, "utf-8"));
+});
+
 // SPA fallback
 app.use((req, res) => {
   res.sendFile(join(__dirname, "dashboard", "dist", "index.html"));
