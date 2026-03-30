@@ -1,0 +1,16 @@
+{
+  "name": "ngo-guardian",
+  "version": "1.0.0",
+  "description": "NGO-Guardian: Autonomous Safety Net for Non-Profits — Agentic vulnerability detection for vibe-coded NGO infrastructure",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "search": "node src/search/discovery.js",
+    "scan": "node src/scan/detector.js",
+    "report": "node src/report/generator.js",
+    "start": "node src/index.js",
+    "scan:deep": "node src/agents/scanner.js"
+  },
+  "keywords": ["ngo", "security", "vulnerability", "guardian", "hackathon"],
+  "license": "MIT"
+}

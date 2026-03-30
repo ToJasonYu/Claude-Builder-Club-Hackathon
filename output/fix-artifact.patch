@@ -1,0 +1,414 @@
+# NGO-Guardian — Fix Artifact
+# Generated: 2026-03-29T23:59:15.820Z
+# This file contains actionable remediation steps for each finding.
+# Priority: CRITICAL → HIGH → MEDIUM → LOW
+
+================================================================================
+# TARGET: EcoRestore Foundation (ecorestorefd.org)
+# Vibe Risk Score: 100/100
+================================================================================
+
+--- FIX: VCC-001 [CRITICAL] Environment file publicly accessible
++++ Location: portal.ecorestorefd.org/.env — contains SUPABASE_SERVICE_ROLE_KEY
+
+# Step 1: Add .env to .gitignore (if not already)
+```
+echo ".env" >> .gitignore
+echo ".env.local" >> .gitignore
+echo ".env.production" >> .gitignore
+```
+
+# Step 2: Rotate ALL credentials in the exposed .env file immediately
+# - Database passwords
+# - API keys (Supabase, Stripe, etc.)
+# - Any secrets or tokens
+
+# Step 3: Move secrets to platform environment variables
+
+--- FIX: VCC-007 [CRITICAL] Supabase tables without Row Level Security
++++ Location: volunteers, donations, sites tables — RLS disabled
+
+# Enable Row Level Security on all tables
+
+```sql
+-- Enable RLS
+ALTER TABLE volunteers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE donations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
+
+-- Create policies (example: users can only read their own data)
+CREATE POLICY "Users read own data" ON volunteers
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins full access" ON volunteers
+  FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+```
+
+--- FIX: VCC-002 [CRITICAL] API keys exposed in client-side JavaScript bundle
++++ Location: Main bundle contains SUPABASE_SERVICE_ROLE_KEY (not anon key)
+
+# Step 1: Identify sensitive keys in your client code
+# Search for: SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET, FIREBASE_ADMIN
+
+# Step 2: Move to server-side only
+```javascript
+// ❌ BEFORE (in client-side code)
+// const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY)
+
+// ✅ AFTER (use anon key on client, service key only on server)
+// Client: use anon key + RLS
+const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+// Server (API route / serverless function): use service role key
+const supabaseAdmin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY)
+```
+
+--- FIX: VCC-005 [HIGH] No Strict-Transport-Security header
++++ Location: portal.ecorestorefd.org — no HSTS header
+
+# Remediation:
+# Add Strict-Transport-Security header with max-age of at least 31536000 (1 year). Include includeSubDomains directive.
+
+--- FIX: VCC-004 [HIGH] No Content-Security-Policy header
++++ Location: portal.ecorestorefd.org — no CSP header
+
+# Remediation:
+# Add a Content-Security-Policy header. Start with a restrictive policy and loosen as needed. At minimum: default-src 'self'.
+
+--- FIX: Security Headers Configuration
++++ Apply to: ecorestorefd.org (all subdomains)
+
+# Add these headers to your server configuration:
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+X-Frame-Options: DENY
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Referrer-Policy: strict-origin-when-cross-origin
+```
+
+
+================================================================================
+# TARGET: OceanGuard Alliance (oceanguardalliance.org)
+# Vibe Risk Score: 100/100
+================================================================================
+
+--- FIX: VCC-007 [CRITICAL] Supabase tables without Row Level Security
++++ Location: sensors, reports tables — RLS disabled, anon key grants full access
+
+# Enable Row Level Security on all tables
+
+```sql
+-- Enable RLS
+ALTER TABLE volunteers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE donations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
+
+-- Create policies (example: users can only read their own data)
+CREATE POLICY "Users read own data" ON volunteers
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins full access" ON volunteers
+  FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+```
+
+--- FIX: VCC-002 [CRITICAL] API keys exposed in client-side JavaScript bundle
++++ Location: SUPABASE_ANON_KEY in client with no RLS = full DB access
+
+# Step 1: Identify sensitive keys in your client code
+# Search for: SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET, FIREBASE_ADMIN
+
+# Step 2: Move to server-side only
+```javascript
+// ❌ BEFORE (in client-side code)
+// const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY)
+
+// ✅ AFTER (use anon key on client, service key only on server)
+// Client: use anon key + RLS
+const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+// Server (API route / serverless function): use service role key
+const supabaseAdmin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY)
+```
+
+--- FIX: VCC-005 [HIGH] No Strict-Transport-Security header
++++ Location: All subdomains — no HSTS
+
+# Remediation:
+# Add Strict-Transport-Security header with max-age of at least 31536000 (1 year). Include includeSubDomains directive.
+
+--- FIX: VCC-004 [HIGH] No Content-Security-Policy header
++++ Location: All subdomains — no CSP
+
+# Remediation:
+# Add a Content-Security-Policy header. Start with a restrictive policy and loosen as needed. At minimum: default-src 'self'.
+
+--- FIX: VCC-003 [HIGH] API endpoints accessible without authentication
++++ Location: /api/sensors — returns raw sensor data without auth
+
+# Add authentication middleware to all API routes
+
+```javascript
+// middleware/auth.js
+export function requireAuth(handler) {
+  return async (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    try {
+      const user = await verifyToken(token);
+      req.user = user;
+      return handler(req, res);
+    } catch (err) {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+  };
+}
+```
+
+--- FIX: VCC-009 [MEDIUM] CORS policy allows all origins
++++ Location: api.oceanguardalliance.org — wildcard CORS
+
+# Remediation:
+# Restrict CORS to only your frontend domain(s). Never use wildcard (*) with credentials.
+
+--- FIX: Security Headers Configuration
++++ Apply to: oceanguardalliance.org (all subdomains)
+
+# Add these headers to your server configuration:
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Referrer-Policy: strict-origin-when-cross-origin
+X-XSS-Protection: 1; mode=block
+```
+
+
+================================================================================
+# TARGET: ChildBridge International (childbridge-intl.org)
+# Vibe Risk Score: 100/100
+================================================================================
+
+--- FIX: VCC-001 [CRITICAL] Environment file publicly accessible
++++ Location: portal.childbridge-intl.org/.env.local — contains STRIPE_SECRET_KEY
+
+# Step 1: Add .env to .gitignore (if not already)
+```
+echo ".env" >> .gitignore
+echo ".env.local" >> .gitignore
+echo ".env.production" >> .gitignore
+```
+
+# Step 2: Rotate ALL credentials in the exposed .env file immediately
+# - Database passwords
+# - API keys (Supabase, Stripe, etc.)
+# - Any secrets or tokens
+
+# Step 3: Move secrets to platform environment variables
+```bash
+netlify env:set STRIPE_SECRET_KEY "sk_live_new_rotated_key"
+```
+
+--- FIX: VCC-002 [CRITICAL] API keys exposed in client-side JavaScript bundle
++++ Location: Stripe publishable key + partial secret in Nuxt client bundle
+
+# Step 1: Identify sensitive keys in your client code
+# Search for: SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET, FIREBASE_ADMIN
+
+# Step 2: Move to server-side only
+```javascript
+// ❌ BEFORE (in client-side code)
+// const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY)
+
+// ✅ AFTER (use anon key on client, service key only on server)
+// Client: use anon key + RLS
+const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+// Server (API route / serverless function): use service role key
+const supabaseAdmin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY)
+```
+
+--- FIX: VCC-004 [HIGH] No Content-Security-Policy header
++++ Location: portal.childbridge-intl.org — no CSP header
+
+# Remediation:
+# Add a Content-Security-Policy header. Start with a restrictive policy and loosen as needed. At minimum: default-src 'self'.
+
+--- FIX: VCC-003 [HIGH] API endpoints accessible without authentication
++++ Location: /api/children — returns children profiles with photos without auth
+
+# Add authentication middleware to all API routes
+
+```javascript
+// middleware/auth.js
+export function requireAuth(handler) {
+  return async (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    try {
+      const user = await verifyToken(token);
+      req.user = user;
+      return handler(req, res);
+    } catch (err) {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+  };
+}
+```
+
+--- FIX: Security Headers Configuration
++++ Apply to: childbridge-intl.org (all subdomains)
+
+# Add to netlify.toml:
+```toml
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+```
+
+
+================================================================================
+# TARGET: Refugee Aid Network (refugeeaidnetwork.org)
+# Vibe Risk Score: 95/100
+================================================================================
+
+--- FIX: VCC-008 [CRITICAL] Firebase Firestore rules allow public read/write
++++ Location: Firestore — 'cases' and 'personnel' collections publicly readable
+
+# Update Firestore security rules
+
+```javascript
+// firestore.rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ❌ BEFORE: allow read, write: if true;
+
+    // ✅ AFTER: Require authentication + role checks
+    match /cases/{caseId} {
+      allow read: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'caseworker'];
+      allow write: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+  }
+}
+```
+
+--- FIX: VCC-002 [CRITICAL] API keys exposed in client-side JavaScript bundle
++++ Location: Firebase config in bundle includes measurementId and appId
+
+# Step 1: Identify sensitive keys in your client code
+# Search for: SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET, FIREBASE_ADMIN
+
+# Step 2: Move to server-side only
+```javascript
+// ❌ BEFORE (in client-side code)
+// const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY)
+
+// ✅ AFTER (use anon key on client, service key only on server)
+// Client: use anon key + RLS
+const supabase = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+// Server (API route / serverless function): use service role key
+const supabaseAdmin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY)
+```
+
+--- FIX: VCC-004 [HIGH] No Content-Security-Policy header
++++ Location: app.refugeeaidnetwork.org — no CSP header
+
+# Remediation:
+# Add a Content-Security-Policy header. Start with a restrictive policy and loosen as needed. At minimum: default-src 'self'.
+
+--- FIX: VCC-006 [MEDIUM] GraphQL introspection enabled in production
++++ Location: refugeeaidnetwork.org/graphql — introspection returns full schema
+
+# Remediation:
+# Disable introspection in production. Most GraphQL servers have a configuration option for this.
+
+--- FIX: Security Headers Configuration
++++ Apply to: refugeeaidnetwork.org (all subdomains)
+
+# Add these headers to your server configuration:
+```
+Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+```
+
+
+================================================================================
+# TARGET: Global Water Initiative (globalwaterinitiative.org)
+# Vibe Risk Score: 53/100
+================================================================================
+
+--- FIX: VCC-004 [HIGH] No Content-Security-Policy header
++++ Location: app.globalwaterinitiative.org
+
+# Remediation:
+# Add a Content-Security-Policy header. Start with a restrictive policy and loosen as needed. At minimum: default-src 'self'.
+
+--- FIX: VCC-003 [HIGH] API endpoints accessible without authentication
++++ Location: /api/v1/donors — returns 200 with donor PII without auth token
+
+# Add authentication middleware to all API routes
+
+```javascript
+// middleware/auth.js
+export function requireAuth(handler) {
+  return async (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    try {
+      const user = await verifyToken(token);
+      req.user = user;
+      return handler(req, res);
+    } catch (err) {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+  };
+}
+```
+
+--- FIX: VCC-009 [MEDIUM] CORS policy allows all origins
++++ Location: api.globalwaterinitiative.org — Access-Control-Allow-Origin: *
+
+# Remediation:
+# Restrict CORS to only your frontend domain(s). Never use wildcard (*) with credentials.
+
+--- FIX: VCC-010 [LOW] JavaScript source maps accessible in production
++++ Location: app.globalwaterinitiative.org/_next/static/*.js.map
+
+# Remediation:
+# Disable source map generation for production builds or restrict .map file access via server configuration.
+
+--- FIX: Security Headers Configuration
++++ Apply to: globalwaterinitiative.org (all subdomains)
+
+# Add to vercel.json:
+```json
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+      ]
+    }
+  ]
+}
+```
+
+

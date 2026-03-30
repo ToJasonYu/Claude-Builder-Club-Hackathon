@@ -1,0 +1,407 @@
+[
+  {
+    "name": "EcoRestore Foundation",
+    "domain": "ecorestorefd.org",
+    "sector": "environmental",
+    "mission": "Restoring degraded ecosystems through community-led reforestation",
+    "subdomains": [
+      "portal.ecorestorefd.org",
+      "api.ecorestorefd.org",
+      "volunteer.ecorestorefd.org"
+    ],
+    "endpoints": [
+      "/api/volunteers",
+      "/api/sites",
+      "/api/donations",
+      "/api/impact-data",
+      "/.env"
+    ],
+    "techStack": {
+      "platform": "Supabase",
+      "framework": "React + Vite",
+      "isVibeCoded": true
+    },
+    "securityHeaders": {
+      "score": 29,
+      "missing": [
+        "Strict-Transport-Security",
+        "Content-Security-Policy",
+        "X-Frame-Options",
+        "Permissions-Policy",
+        "Referrer-Policy"
+      ],
+      "present": [
+        "X-Content-Type-Options",
+        "X-XSS-Protection"
+      ]
+    },
+    "vulnerabilities": [
+      {
+        "id": "VCC-001",
+        "title": "Environment file publicly accessible",
+        "severity": "CRITICAL",
+        "category": "Secrets Exposure",
+        "location": "portal.ecorestorefd.org/.env — contains SUPABASE_SERVICE_ROLE_KEY",
+        "cwe": "CWE-200"
+      },
+      {
+        "id": "VCC-007",
+        "title": "Supabase tables without Row Level Security",
+        "severity": "CRITICAL",
+        "category": "Broken Access Control",
+        "location": "volunteers, donations, sites tables — RLS disabled",
+        "cwe": "CWE-862"
+      },
+      {
+        "id": "VCC-002",
+        "title": "API keys exposed in client-side JavaScript bundle",
+        "severity": "CRITICAL",
+        "category": "Secrets Exposure",
+        "location": "Main bundle contains SUPABASE_SERVICE_ROLE_KEY (not anon key)",
+        "cwe": "CWE-798"
+      },
+      {
+        "id": "VCC-005",
+        "title": "No Strict-Transport-Security header",
+        "severity": "HIGH",
+        "category": "Missing Security Headers",
+        "location": "portal.ecorestorefd.org — no HSTS header",
+        "cwe": "CWE-319"
+      },
+      {
+        "id": "VCC-004",
+        "title": "No Content-Security-Policy header",
+        "severity": "HIGH",
+        "category": "Missing Security Headers",
+        "location": "portal.ecorestorefd.org — no CSP header",
+        "cwe": "CWE-1021"
+      }
+    ],
+    "scoring": {
+      "vibeRiskScore": 100,
+      "riskLevel": "🔴 SEVERE",
+      "criticalDataExposure": false
+    }
+  },
+  {
+    "name": "OceanGuard Alliance",
+    "domain": "oceanguardalliance.org",
+    "sector": "environmental",
+    "mission": "Marine conservation and ocean pollution monitoring",
+    "subdomains": [
+      "data.oceanguardalliance.org",
+      "api.oceanguardalliance.org",
+      "map.oceanguardalliance.org"
+    ],
+    "endpoints": [
+      "/api/sensors",
+      "/api/reports",
+      "/api/public/stats",
+      "/supabase/rest/v1/"
+    ],
+    "techStack": {
+      "platform": "Supabase",
+      "framework": "SvelteKit",
+      "isVibeCoded": true
+    },
+    "securityHeaders": {
+      "score": null,
+      "missing": [
+        "Strict-Transport-Security",
+        "Content-Security-Policy",
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Permissions-Policy",
+        "Referrer-Policy",
+        "X-XSS-Protection"
+      ],
+      "present": []
+    },
+    "vulnerabilities": [
+      {
+        "id": "VCC-007",
+        "title": "Supabase tables without Row Level Security",
+        "severity": "CRITICAL",
+        "category": "Broken Access Control",
+        "location": "sensors, reports tables — RLS disabled, anon key grants full access",
+        "cwe": "CWE-862"
+      },
+      {
+        "id": "VCC-002",
+        "title": "API keys exposed in client-side JavaScript bundle",
+        "severity": "CRITICAL",
+        "category": "Secrets Exposure",
+        "location": "SUPABASE_ANON_KEY in client with no RLS = full DB access",
+        "cwe": "CWE-798"
+      },
+      {
+        "id": "VCC-005",
+        "title": "No Strict-Transport-Security header",
+        "severity": "HIGH",
+        "category": "Missing Security Headers",
+        "location": "All subdomains — no HSTS",
+        "cwe": "CWE-319"
+      },
+      {
+        "id": "VCC-004",
+        "title": "No Content-Security-Policy header",
+        "severity": "HIGH",
+        "category": "Missing Security Headers",
+        "location": "All subdomains — no CSP",
+        "cwe": "CWE-1021"
+      },
+      {
+        "id": "VCC-009",
+        "title": "CORS policy allows all origins",
+        "severity": "MEDIUM",
+        "category": "Security Misconfiguration",
+        "location": "api.oceanguardalliance.org — wildcard CORS",
+        "cwe": "CWE-942"
+      },
+      {
+        "id": "VCC-003",
+        "title": "API endpoints accessible without authentication",
+        "severity": "HIGH",
+        "category": "Broken Access Control",
+        "location": "/api/sensors — returns raw sensor data without auth",
+        "cwe": "CWE-306"
+      }
+    ],
+    "scoring": {
+      "vibeRiskScore": 100,
+      "riskLevel": "🔴 SEVERE",
+      "criticalDataExposure": false
+    }
+  },
+  {
+    "name": "ChildBridge International",
+    "domain": "childbridge-intl.org",
+    "sector": "humanitarian",
+    "mission": "Education and welfare programs for orphaned and at-risk children",
+    "subdomains": [
+      "portal.childbridge-intl.org",
+      "api.childbridge-intl.org",
+      "sponsor.childbridge-intl.org",
+      "files.childbridge-intl.org"
+    ],
+    "endpoints": [
+      "/api/children",
+      "/api/sponsors",
+      "/api/payments",
+      "/api/documents",
+      "/.env.local"
+    ],
+    "techStack": {
+      "platform": "Netlify",
+      "framework": "Nuxt 3",
+      "isVibeCoded": true
+    },
+    "securityHeaders": {
+      "score": 71,
+      "missing": [
+        "Content-Security-Policy",
+        "Permissions-Policy"
+      ],
+      "present": [
+        "Strict-Transport-Security",
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "X-XSS-Protection",
+        "Referrer-Policy"
+      ]
+    },
+    "vulnerabilities": [
+      {
+        "id": "VCC-001",
+        "title": "Environment file publicly accessible",
+        "severity": "CRITICAL",
+        "category": "Secrets Exposure",
+        "location": "portal.childbridge-intl.org/.env.local — contains STRIPE_SECRET_KEY",
+        "cwe": "CWE-200"
+      },
+      {
+        "id": "VCC-002",
+        "title": "API keys exposed in client-side JavaScript bundle",
+        "severity": "CRITICAL",
+        "category": "Secrets Exposure",
+        "location": "Stripe publishable key + partial secret in Nuxt client bundle",
+        "cwe": "CWE-798"
+      },
+      {
+        "id": "VCC-004",
+        "title": "No Content-Security-Policy header",
+        "severity": "HIGH",
+        "category": "Missing Security Headers",
+        "location": "portal.childbridge-intl.org — no CSP header",
+        "cwe": "CWE-1021"
+      },
+      {
+        "id": "VCC-003",
+        "title": "API endpoints accessible without authentication",
+        "severity": "HIGH",
+        "category": "Broken Access Control",
+        "location": "/api/children — returns children profiles with photos without auth",
+        "cwe": "CWE-306"
+      }
+    ],
+    "scoring": {
+      "vibeRiskScore": 100,
+      "riskLevel": "🔴 SEVERE",
+      "criticalDataExposure": true
+    }
+  },
+  {
+    "name": "Refugee Aid Network",
+    "domain": "refugeeaidnetwork.org",
+    "sector": "humanitarian",
+    "mission": "Emergency relief and long-term support for displaced populations",
+    "subdomains": [
+      "app.refugeeaidnetwork.org",
+      "api.refugeeaidnetwork.org",
+      "intake.refugeeaidnetwork.org",
+      "maps.refugeeaidnetwork.org"
+    ],
+    "endpoints": [
+      "/api/cases",
+      "/api/locations",
+      "/api/personnel",
+      "/api/auth/login",
+      "/graphql"
+    ],
+    "techStack": {
+      "platform": "Firebase",
+      "framework": "Next.js 13",
+      "isVibeCoded": true
+    },
+    "securityHeaders": {
+      "score": 57,
+      "missing": [
+        "Content-Security-Policy",
+        "X-Frame-Options",
+        "Referrer-Policy"
+      ],
+      "present": [
+        "Strict-Transport-Security",
+        "X-Content-Type-Options",
+        "X-XSS-Protection",
+        "Permissions-Policy"
+      ]
+    },
+    "vulnerabilities": [
+      {
+        "id": "VCC-008",
+        "title": "Firebase Firestore rules allow public read/write",
+        "severity": "CRITICAL",
+        "category": "Broken Access Control",
+        "location": "Firestore — 'cases' and 'personnel' collections publicly readable",
+        "cwe": "CWE-862"
+      },
+      {
+        "id": "VCC-006",
+        "title": "GraphQL introspection enabled in production",
+        "severity": "MEDIUM",
+        "category": "Information Disclosure",
+        "location": "refugeeaidnetwork.org/graphql — introspection returns full schema",
+        "cwe": "CWE-200"
+      },
+      {
+        "id": "VCC-004",
+        "title": "No Content-Security-Policy header",
+        "severity": "HIGH",
+        "category": "Missing Security Headers",
+        "location": "app.refugeeaidnetwork.org — no CSP header",
+        "cwe": "CWE-1021"
+      },
+      {
+        "id": "VCC-002",
+        "title": "API keys exposed in client-side JavaScript bundle",
+        "severity": "CRITICAL",
+        "category": "Secrets Exposure",
+        "location": "Firebase config in bundle includes measurementId and appId",
+        "cwe": "CWE-798"
+      }
+    ],
+    "scoring": {
+      "vibeRiskScore": 95,
+      "riskLevel": "🔴 SEVERE",
+      "criticalDataExposure": true
+    }
+  },
+  {
+    "name": "Global Water Initiative",
+    "domain": "globalwaterinitiative.org",
+    "sector": "humanitarian",
+    "mission": "Providing clean water access to underserved communities worldwide",
+    "subdomains": [
+      "app.globalwaterinitiative.org",
+      "api.globalwaterinitiative.org",
+      "donate.globalwaterinitiative.org",
+      "dashboard.globalwaterinitiative.org"
+    ],
+    "endpoints": [
+      "/api/v1/donors",
+      "/api/v1/projects",
+      "/api/v1/beneficiaries",
+      "/api/v1/reports",
+      "/api/internal/admin"
+    ],
+    "techStack": {
+      "platform": "Vercel",
+      "framework": "Next.js 14",
+      "isVibeCoded": true
+    },
+    "securityHeaders": {
+      "score": 57,
+      "missing": [
+        "Content-Security-Policy",
+        "Permissions-Policy",
+        "Referrer-Policy"
+      ],
+      "present": [
+        "Strict-Transport-Security",
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "X-XSS-Protection"
+      ]
+    },
+    "vulnerabilities": [
+      {
+        "id": "VCC-004",
+        "title": "No Content-Security-Policy header",
+        "severity": "HIGH",
+        "category": "Missing Security Headers",
+        "location": "app.globalwaterinitiative.org",
+        "cwe": "CWE-1021"
+      },
+      {
+        "id": "VCC-003",
+        "title": "API endpoints accessible without authentication",
+        "severity": "HIGH",
+        "category": "Broken Access Control",
+        "location": "/api/v1/donors — returns 200 with donor PII without auth token",
+        "cwe": "CWE-306"
+      },
+      {
+        "id": "VCC-010",
+        "title": "JavaScript source maps accessible in production",
+        "severity": "LOW",
+        "category": "Information Disclosure",
+        "location": "app.globalwaterinitiative.org/_next/static/*.js.map",
+        "cwe": "CWE-540"
+      },
+      {
+        "id": "VCC-009",
+        "title": "CORS policy allows all origins",
+        "severity": "MEDIUM",
+        "category": "Security Misconfiguration",
+        "location": "api.globalwaterinitiative.org — Access-Control-Allow-Origin: *",
+        "cwe": "CWE-942"
+      }
+    ],
+    "scoring": {
+      "vibeRiskScore": 53,
+      "riskLevel": "🟡 MODERATE",
+      "criticalDataExposure": true
+    }
+  }
+]
