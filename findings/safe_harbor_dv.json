@@ -1,0 +1,32 @@
+{
+  "ngo": {
+    "name": "Safe Harbor DV Services",
+    "slug": "safe_harbor_dv",
+    "website_url": "https://www.thehotline.org",
+    "mission_statement": "Safe Harbor DV Services provides emergency shelter, legal advocacy, counseling, and community support services to survivors of domestic violence and their children. We operate confidential shelters and believe every person deserves to live free from abuse.",
+    "contact_email": "security@safeharbordv-example.org",
+    "population_served": "domestic_violence_survivors"
+  },
+  "findings": [
+    {
+      "id": "SHD-001",
+      "title": "API response leaking shelter facility GPS coordinates and addresses",
+      "severity": "critical",
+      "cwe_id": "CWE-200",
+      "cvss_score": 9.8,
+      "discovered_date": "2026-03-18",
+      "vulnerability_type": "disclosure",
+      "affected_component": "Client Services API — /api/shelters/nearby",
+      "data_sensitivity": "location",
+      "ease_of_remediation": "medium",
+      "description": "The /api/shelters/nearby endpoint returns the full GPS coordinates, street addresses, and capacity information for all shelter facilities in the system — including confidential emergency shelters. This endpoint requires no authentication and can be queried by anyone. If an abuser discovered this endpoint, they could locate survivors in your confidential shelters, putting lives at immediate risk.",
+      "evidence_summary": "Unauthenticated GET request to /api/shelters/nearby?lat=37.7749&lng=-122.4194&radius=100 returned JSON with 7 shelter facilities including GPS coordinates accurate to 6 decimal places and full street addresses including unit numbers.",
+      "remediation_code": "# Step 1: Require authentication for all shelter location endpoints\n# Flask example:\nfrom functools import wraps\nfrom flask import g, jsonify\n\ndef require_auth(f):\n    @wraps(f)\n    def decorated(*args, **kwargs):\n        if not g.current_user or not g.current_user.is_authenticated:\n            return jsonify({\"error\": \"Authentication required\"}), 401\n        return f(*args, **kwargs)\n    return decorated\n\n@app.route('/api/shelters/nearby')\n@require_auth\ndef get_nearby_shelters():\n    # Only return approximate area, never exact coordinates\n    return jsonify(get_shelters_approximate_area())\n\n# Step 2: Never return exact coordinates for confidential shelters\n# Replace exact GPS with neighborhood/zone identifiers:\ndef get_shelters_approximate_area():\n    shelters = Shelter.query.filter_by(is_confidential=False).all()\n    return [{\"zone\": s.service_zone, \"capacity\": s.available_beds} for s in shelters]",
+      "remediation_type": "code_fix",
+      "references": [
+        "https://owasp.org/www-project-top-ten/2021/A01_2021-Broken_Access_Control",
+        "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+      ]
+    }
+  ]
+}

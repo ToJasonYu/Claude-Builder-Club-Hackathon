@@ -1,0 +1,53 @@
+{
+  "ngo": {
+    "name": "Children's Health Fund",
+    "slug": "childrens_health_fund",
+    "website_url": "https://www.childrenshealthfund.org",
+    "mission_statement": "Children's Health Fund ensures that America's most vulnerable children receive the comprehensive health care they need to thrive. We provide mobile medical, dental, and mental health services to children in underserved communities, homeless shelters, and disaster-affected areas.",
+    "contact_email": "security@chf-example.org",
+    "population_served": "children"
+  },
+  "findings": [
+    {
+      "id": "CHF-001",
+      "title": "Patient portal accepts TLS 1.0/1.1 connections exposing health records in transit",
+      "severity": "high",
+      "cwe_id": "CWE-326",
+      "cvss_score": 7.4,
+      "discovered_date": "2026-03-20",
+      "vulnerability_type": "misconfiguration",
+      "affected_component": "Patient Portal — patient.chf-example.org (nginx)",
+      "data_sensitivity": "medical",
+      "ease_of_remediation": "complex",
+      "description": "The patient portal web server accepts TLS 1.0 and TLS 1.1 connections, which are deprecated protocols with known vulnerabilities including POODLE and BEAST attacks. Medical records transmitted between families and the patient portal — including vaccination records, mental health assessments, and prescription histories for children — are potentially interceptable on networks that an attacker controls.",
+      "evidence_summary": "Confirmed using testssl.sh: server accepts TLS 1.0 and 1.1 handshakes. POODLE vulnerability confirmed (CVE-2014-3566). Server cipher suite includes RC4 and 3DES ciphers, both considered weak.",
+      "remediation_code": "# nginx configuration update — /etc/nginx/conf.d/patient-portal.conf\n\nserver {\n    listen 443 ssl;\n    server_name patient.chf-example.org;\n\n    # Disable TLS 1.0 and 1.1 — allow only TLS 1.2 and 1.3\n    ssl_protocols TLSv1.2 TLSv1.3;\n\n    # Strong cipher suites only\n    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256';\n    ssl_prefer_server_ciphers off;\n\n    # Enable HSTS\n    add_header Strict-Transport-Security \"max-age=63072000; includeSubDomains; preload\" always;\n\n    # ... rest of config\n}\n\n# After updating, reload nginx:\n# sudo nginx -t && sudo systemctl reload nginx\n\n# Verify with:\n# testssl.sh --protocols patient.chf-example.org",
+      "remediation_type": "architecture_change",
+      "references": [
+        "https://wiki.mozilla.org/Security/Server_Side_TLS",
+        "https://ssl-config.mozilla.org/",
+        "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2014-3566"
+      ]
+    },
+    {
+      "id": "CHF-002",
+      "title": "Predictable password reset tokens allow account takeover",
+      "severity": "high",
+      "cwe_id": "CWE-330",
+      "cvss_score": 7.5,
+      "discovered_date": "2026-03-21",
+      "vulnerability_type": "auth_bypass",
+      "affected_component": "Patient Portal — /accounts/password-reset",
+      "data_sensitivity": "general_pii",
+      "ease_of_remediation": "medium",
+      "description": "The password reset token generation uses a predictable algorithm based on the user's email address and a Unix timestamp. An attacker who knows a patient's email address (which is often publicly available) can generate valid reset tokens within a short time window and take over accounts, gaining access to the patient's and their children's health records.",
+      "evidence_summary": "Reverse-engineered the token generation logic from the JavaScript bundle. Confirmed token pattern: base64(sha1(email + floor(time/300)*300)). Generated valid token for test account using this formula; successfully reset password.",
+      "remediation_code": "import secrets\nimport hashlib\nfrom datetime import datetime, timedelta, timezone\nfrom your_app.models import PasswordResetToken\n\n# BEFORE (vulnerable — predictable token):\n# import hashlib, time\n# token = hashlib.sha1(f\"{email}{int(time.time() // 300) * 300}\".encode()).hexdigest()\n\n# AFTER (secure — cryptographically random token):\ndef create_password_reset_token(user):\n    # Generate a cryptographically secure random token\n    token = secrets.token_urlsafe(32)  # 256 bits of randomness\n\n    # Store hashed version in database (don't store plaintext)\n    token_hash = hashlib.sha256(token.encode()).hexdigest()\n\n    expiry = datetime.now(timezone.utc) + timedelta(hours=1)\n\n    PasswordResetToken.objects.create(\n        user=user,\n        token_hash=token_hash,\n        expires_at=expiry,\n        used=False,\n    )\n\n    return token  # send only this to the user via email\n\ndef verify_reset_token(token_string, user):\n    token_hash = hashlib.sha256(token_string.encode()).hexdigest()\n    try:\n        record = PasswordResetToken.objects.get(\n            user=user,\n            token_hash=token_hash,\n            used=False,\n            expires_at__gt=datetime.now(timezone.utc),\n        )\n        record.used = True\n        record.save()\n        return True\n    except PasswordResetToken.DoesNotExist:\n        return False",
+      "remediation_type": "code_fix",
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html",
+        "https://docs.python.org/3/library/secrets.html"
+      ]
+    }
+  ]
+}
