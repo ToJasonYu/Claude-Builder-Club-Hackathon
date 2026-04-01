@@ -3,6 +3,7 @@
 **Autonomous Safety Net for Non-Profits** — Agentic vulnerability detection for vibe-coded NGO infrastructure.
 
 > "We are Guardians, not Hunters."
+> 
 
 ## Architecture
 
